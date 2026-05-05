@@ -1,68 +1,72 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
+import os
+
+np.random.seed(42)
+os.makedirs("outputs", exist_ok=True)
 
 df = pd.read_csv("data/processed/feature_engineered_data.csv")
 
 df["date"] = pd.to_datetime(df["date"])
 df.set_index("date", inplace=True)
 
-df_subset = df.loc["2016-01-12":"2016-01-18"].copy()
+df["is_anomaly"] = 0
+df["anomaly_type"] = "Normal"
+df["Appliances_Original"] = df["Appliances"].copy()
 
-df_subset["is_anomaly"] = 0
-df_subset["Appliances_Original"] = df_subset["Appliances"].copy()
+appliances_col = df.columns.get_loc("Appliances")
+is_anomaly_col = df.columns.get_loc("is_anomaly")
+anomaly_type_col = df.columns.get_loc("anomaly_type")
 
-# --- Senaryo 1: Tost makinesi (kısa spike)
-anomaly_start_1 = pd.to_datetime("2016-01-14 02:00:00")
-periods_1 = 4
-extra_watt_1 = 800
+# 1. Kısa süreli yüksek tüketim: ütü / tost makinesi açık kaldı
+spike_indexes = np.random.choice(len(df), size=120, replace=False)
 
-for i in range(periods_1):
-    current_time = anomaly_start_1 + pd.Timedelta(minutes=10 * i)
-    if current_time in df_subset.index:
-        df_subset.loc[current_time, "Appliances"] += extra_watt_1
-        df_subset.loc[current_time, "is_anomaly"] = 1
-        df_subset.loc[current_time, "anomaly_type"] = "Tost makinesi açık unutuldu"
+for i in spike_indexes:
+    df.iloc[i, appliances_col] += 700
+    df.iloc[i, is_anomaly_col] = 1
+    df.iloc[i, anomaly_type_col] = "Kisa sureli cihaz acik kaldi"
 
-# --- Senaryo 2: Kombi arızası (uzun yüksek)
-anomaly_start_2 = pd.to_datetime("2016-01-16 14:30:00")
-periods_2 = 6
-extra_watt_2 = 600
+# 2. Uzun süreli yüksek tüketim: kombi / ısıtıcı problemi
+for _ in range(6):
+    start = np.random.randint(0, len(df) - 36)
+    end = start + 36  # 36 satır = 6 saat, çünkü veri 10 dakikalık
 
-for i in range(periods_2):
-    current_time = anomaly_start_2 + pd.Timedelta(minutes=10 * i)
-    if current_time in df_subset.index:
-        df_subset.loc[current_time, "Appliances"] += extra_watt_2
-        df_subset.loc[current_time, "is_anomaly"] = 1
-        df_subset.loc[current_time, "anomaly_type"] = "Kombi/ısıtıcı arızası"
+    df.iloc[start:end, appliances_col] += 350
+    df.iloc[start:end, is_anomaly_col] = 1
+    df.iloc[start:end, anomaly_type_col] = "Uzun sureli isitici problemi"
 
-df_subset["anomaly_type"] = df_subset["anomaly_type"].fillna("Normal")
+# Grafik için ilk 1000 satır yerine anomali içeren bir bölüm seçelim
+first_anomaly_index = df.index[df["is_anomaly"] == 1][0]
+plot_start = first_anomaly_index - pd.Timedelta(hours=12)
+plot_end = first_anomaly_index + pd.Timedelta(hours=24)
 
-# --- Görselleştirme
-plt.figure(figsize=(15, 6))
+df_plot = df.loc[plot_start:plot_end]
+
+plt.figure(figsize=(15, 5))
 
 plt.plot(
-    df_subset.index,
-    df_subset["Appliances_Original"],
+    df_plot.index,
+    df_plot["Appliances_Original"],
     label="Orijinal tüketim",
     alpha=0.6
 )
 
 plt.plot(
-    df_subset.index,
-    df_subset["Appliances"],
+    df_plot.index,
+    df_plot["Appliances"],
     label="Anomalili tüketim",
-    alpha=0.7,
-    linestyle="--"
+    linestyle="--",
+    alpha=0.8
 )
 
-anomalies = df_subset[df_subset["is_anomaly"] == 1]
+anomalies = df_plot[df_plot["is_anomaly"] == 1]
 
 plt.scatter(
     anomalies.index,
     anomalies["Appliances"],
-    s=50,
     label="Anomali",
-    zorder=5
+    s=40
 )
 
 plt.title("Sentetik Anomali Enjeksiyonu")
@@ -73,11 +77,12 @@ plt.grid(True, linestyle=":", alpha=0.7)
 plt.tight_layout()
 
 plt.savefig("outputs/anomaly_visualization.png", dpi=300)
+plt.close()
 
-# --- CSV'yi DOĞRU isimle kaydet
-df_subset.to_csv("data/processed/anomaly_dataset.csv")
+df.to_csv("data/processed/anomaly_dataset.csv")
 
-print("Anomali enjeksiyonu tamamlandı.")
-print("Grafik kaydedildi: outputs/anomaly_visualization.png")
-print("Anomalili veri kaydedildi: data/processed/anomaly_dataset.csv")
-print(df_subset["is_anomaly"].value_counts())
+print("Anomali dataset oluşturuldu.")
+print(df["is_anomaly"].value_counts())
+print(df["anomaly_type"].value_counts())
+print("Kaydedilen dosya: data/processed/anomaly_dataset.csv")
+print("Kaydedilen grafik: outputs/anomaly_visualization.png")
