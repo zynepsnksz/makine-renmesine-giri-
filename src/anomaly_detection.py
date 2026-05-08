@@ -27,9 +27,12 @@ df = df.sort_values("date")
 features = [
     "Appliances",
     "Hour",
+    "DayOfWeek",
     "Is_Weekend",
+    "Part_of_Day_Code",
     "Average_Indoor_Temperature",
     "Delta_T",
+    "Thermal_Comfort_Index",
     "Energy_Lag_1",
     "Energy_Rolling_Mean",
     "Energy_Rolling_Std"
